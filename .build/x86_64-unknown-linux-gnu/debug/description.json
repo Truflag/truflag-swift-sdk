@@ -1,0 +1,698 @@
+{
+  "builtTestProducts" : [
+    {
+      "binaryPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.xctest",
+      "packagePath" : "/work",
+      "productName" : "TruflagSDKPackageTests"
+    }
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+    "TruflagSDKPackageDiscoveredTests"
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.TruflagSDK-x86_64-unknown-linux-gnu-debug.module" : {
+      "executable" : "/usr/bin/swiftc",
+      "fileList" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/sources",
+      "importPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/Sources/TruflagSDK/Models.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/Sources/TruflagSDK/TruflagClient.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/swift-version-24593BA9C3E375BF.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "TruflagSDK",
+      "moduleOutputPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDK.swiftmodule",
+      "objects" : [
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/Models.swift.o",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/TruflagClient.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-unknown-linux-gnu",
+        "-enable-batch-mode",
+        "-index-store-path",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j16",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-module-cache-path",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-swift-version",
+        "5",
+        "-g",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "work",
+        "-Xcc",
+        "-fno-omit-frame-pointer"
+      ],
+      "outputFileMapPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/Models.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/TruflagClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDK.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/work/Sources/TruflagSDK/Models.swift",
+        "/work/Sources/TruflagSDK/TruflagClient.swift"
+      ],
+      "tempsPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.TruflagSDKPackageDiscoveredTests-x86_64-unknown-linux-gnu-debug.module" : {
+      "executable" : "/usr/bin/swiftc",
+      "fileList" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/sources",
+      "importPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/TruflagSDKTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/all-discovered-tests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/swift-version-24593BA9C3E375BF.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "TruflagSDKPackageDiscoveredTests",
+      "moduleOutputPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKPackageDiscoveredTests.swiftmodule",
+      "objects" : [
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/TruflagSDKTests.swift.o",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/all-discovered-tests.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-unknown-linux-gnu",
+        "-enable-batch-mode",
+        "-index-store-path",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j16",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-module-cache-path",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-g",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "work",
+        "-Xcc",
+        "-fno-omit-frame-pointer"
+      ],
+      "outputFileMapPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/TruflagSDKTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/all-discovered-tests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKPackageDiscoveredTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/TruflagSDKTests.swift",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/all-discovered-tests.swift"
+      ],
+      "tempsPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.TruflagSDKPackageTests-x86_64-unknown-linux-gnu-debug.module" : {
+      "executable" : "/usr/bin/swiftc",
+      "fileList" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build/sources",
+      "importPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.derived/runner.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/swift-version-24593BA9C3E375BF.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKPackageDiscoveredTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "TruflagSDKPackageTests",
+      "moduleOutputPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKPackageTests.swiftmodule",
+      "objects" : [
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build/runner.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-unknown-linux-gnu",
+        "-enable-batch-mode",
+        "-index-store-path",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j16",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-module-cache-path",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-g",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "work",
+        "-Xcc",
+        "-fno-omit-frame-pointer"
+      ],
+      "outputFileMapPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKPackageTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.derived/runner.swift"
+      ],
+      "tempsPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.TruflagSDKTests-x86_64-unknown-linux-gnu-debug.module" : {
+      "executable" : "/usr/bin/swiftc",
+      "fileList" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/sources",
+      "importPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/Tests/TruflagSDKTests/TruflagClientTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/Tests/TruflagSDKTests/TruflagLiveIntegrationTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/swift-version-24593BA9C3E375BF.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDK.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "TruflagSDKTests",
+      "moduleOutputPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKTests.swiftmodule",
+      "objects" : [
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/TruflagClientTests.swift.o",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/TruflagLiveIntegrationTests.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-unknown-linux-gnu",
+        "-enable-batch-mode",
+        "-index-store-path",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j16",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-module-cache-path",
+        "/work/.build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-swift-version",
+        "5",
+        "-g",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "work",
+        "-Xcc",
+        "-fno-omit-frame-pointer"
+      ],
+      "outputFileMapPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/TruflagClientTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/TruflagLiveIntegrationTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/work/Tests/TruflagSDKTests/TruflagClientTests.swift",
+        "/work/Tests/TruflagSDKTests/TruflagLiveIntegrationTests.swift"
+      ],
+      "tempsPath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "TruflagSDK" : [
+      "/usr/bin/swiftc",
+      "-module-name",
+      "TruflagSDK",
+      "-package-name",
+      "work",
+      "-incremental",
+      "-c",
+      "/work/Sources/TruflagSDK/Models.swift",
+      "/work/Sources/TruflagSDK/TruflagClient.swift",
+      "-I",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/Modules",
+      "-target",
+      "x86_64-unknown-linux-gnu",
+      "-enable-batch-mode",
+      "-index-store-path",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j16",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-module-cache-path",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-swift-version",
+      "5",
+      "-g",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "work",
+      "-Xcc",
+      "-fno-omit-frame-pointer",
+      "-driver-use-frontend-path",
+      "/usr/bin/swiftc"
+    ],
+    "TruflagSDKPackageDiscoveredTests" : [
+      "/usr/bin/swiftc",
+      "-module-name",
+      "TruflagSDKPackageDiscoveredTests",
+      "-package-name",
+      "work",
+      "-incremental",
+      "-c",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/TruflagSDKTests.swift",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/all-discovered-tests.swift",
+      "-I",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/Modules",
+      "-target",
+      "x86_64-unknown-linux-gnu",
+      "-enable-batch-mode",
+      "-index-store-path",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j16",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-module-cache-path",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-g",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "work",
+      "-Xcc",
+      "-fno-omit-frame-pointer",
+      "-driver-use-frontend-path",
+      "/usr/bin/swiftc"
+    ],
+    "TruflagSDKPackageTests" : [
+      "/usr/bin/swiftc",
+      "-module-name",
+      "TruflagSDKPackageTests",
+      "-package-name",
+      "work",
+      "-incremental",
+      "-c",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.derived/runner.swift",
+      "-I",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/Modules",
+      "-target",
+      "x86_64-unknown-linux-gnu",
+      "-enable-batch-mode",
+      "-index-store-path",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j16",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-module-cache-path",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-g",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "work",
+      "-Xcc",
+      "-fno-omit-frame-pointer",
+      "-driver-use-frontend-path",
+      "/usr/bin/swiftc"
+    ],
+    "TruflagSDKTests" : [
+      "/usr/bin/swiftc",
+      "-module-name",
+      "TruflagSDKTests",
+      "-package-name",
+      "work",
+      "-incremental",
+      "-c",
+      "/work/Tests/TruflagSDKTests/TruflagClientTests.swift",
+      "/work/Tests/TruflagSDKTests/TruflagLiveIntegrationTests.swift",
+      "-I",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/Modules",
+      "-target",
+      "x86_64-unknown-linux-gnu",
+      "-enable-batch-mode",
+      "-index-store-path",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j16",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-module-cache-path",
+      "/work/.build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-swift-version",
+      "5",
+      "-g",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "work",
+      "-Xcc",
+      "-fno-omit-frame-pointer",
+      "-driver-use-frontend-path",
+      "/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "TruflagSDK" : [
+
+    ],
+    "TruflagSDKPackageDiscoveredTests" : [
+      "TruflagSDKTests",
+      "TruflagSDK"
+    ],
+    "TruflagSDKPackageTests" : [
+      "TruflagSDKPackageDiscoveredTests",
+      "TruflagSDKTests",
+      "TruflagSDK"
+    ],
+    "TruflagSDKTests" : [
+      "TruflagSDK"
+    ]
+  },
+  "testDiscoveryCommands" : {
+    "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/all-discovered-tests.swift" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/TruflagClientTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/TruflagLiveIntegrationTests.swift.o"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/TruflagSDKTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/all-discovered-tests.swift"
+        }
+      ]
+    }
+  },
+  "testEntryPointCommands" : {
+    "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.derived/runner.swift" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/Modules/TruflagSDKPackageDiscoveredTests.swiftmodule"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.derived/runner.swift"
+        }
+      ]
+    }
+  },
+  "writeCommands" : {
+    "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/Sources/TruflagSDK/Models.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/Sources/TruflagSDK/TruflagClient.swift"
+        }
+      ],
+      "outputFilePath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/sources"
+    },
+    "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/TruflagSDKTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.derived/all-discovered-tests.swift"
+        }
+      ],
+      "outputFilePath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/sources"
+    },
+    "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.derived/runner.swift"
+        }
+      ],
+      "outputFilePath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build/sources"
+    },
+    "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/Models.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/TruflagClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDK.build/TruflagSDK.swiftmodule.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/TruflagSDKPackageDiscoveredTests.swiftmodule.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/TruflagSDKTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageDiscoveredTests.build/all-discovered-tests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build/TruflagSDKPackageTests.swiftmodule.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/TruflagClientTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/TruflagLiveIntegrationTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/TruflagSDKTests.swiftmodule.o"
+        }
+      ],
+      "outputFilePath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKPackageTests.product/Objects.LinkFileList"
+    },
+    "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/Tests/TruflagSDKTests/TruflagClientTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/work/Tests/TruflagSDKTests/TruflagLiveIntegrationTests.swift"
+        }
+      ],
+      "outputFilePath" : "/work/.build/x86_64-unknown-linux-gnu/debug/TruflagSDKTests.build/sources"
+    },
+    "/work/.build/x86_64-unknown-linux-gnu/debug/swift-version-24593BA9C3E375BF.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/work/.build/x86_64-unknown-linux-gnu/debug/swift-version-24593BA9C3E375BF.txt"
+    }
+  }
+}

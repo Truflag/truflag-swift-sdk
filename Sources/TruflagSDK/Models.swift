@@ -1,0 +1,162 @@
+import Foundation
+
+public struct TruflagUser: Codable, Equatable {
+    public let id: String
+    public let attributes: [String: AnyCodable]?
+
+    public init(id: String, attributes: [String: AnyCodable]? = nil) {
+        self.id = id
+        self.attributes = attributes
+    }
+}
+
+public struct TruflagConfigureOptions {
+    public let apiKey: String
+    public let user: TruflagUser?
+    public let baseURL: URL
+    public let requestTimeoutMs: Int
+
+    public init(
+        apiKey: String,
+        user: TruflagUser? = nil,
+        baseURL: URL = URL(string: "https://sdk.truflag.com")!,
+        requestTimeoutMs: Int = 6000
+    ) {
+        self.apiKey = apiKey
+        self.user = user
+        self.baseURL = baseURL
+        self.requestTimeoutMs = requestTimeoutMs
+    }
+}
+
+public struct TruflagFlag: Codable, Equatable {
+    public let key: String
+    public let value: AnyCodable
+    public let payload: [String: AnyCodable]?
+
+    public init(key: String, value: AnyCodable, payload: [String: AnyCodable]? = nil) {
+        self.key = key
+        self.value = value
+        self.payload = payload
+    }
+}
+
+struct TruflagRemoteFlagsMeta: Codable {
+    let configVersion: String?
+    let staleConfig: Bool?
+}
+
+struct TruflagRemoteFlagsResponse: Codable {
+    let flags: [TruflagFlag]
+    let meta: TruflagRemoteFlagsMeta?
+}
+
+public struct AnyCodable: Codable, Equatable {
+    public let value: Any
+
+    public init(_ value: Any) {
+        self.value = value
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+
+        if let value = try? container.decode(Bool.self) {
+            self.value = value
+        } else if let value = try? container.decode(Int.self) {
+            self.value = value
+        } else if let value = try? container.decode(Double.self) {
+            self.value = value
+        } else if let value = try? container.decode(String.self) {
+            self.value = value
+        } else if let value = try? container.decode([String: AnyCodable].self) {
+            self.value = value.mapValues { $0.value }
+        } else if let value = try? container.decode([AnyCodable].self) {
+            self.value = value.map { $0.value }
+        } else if container.decodeNil() {
+            self.value = NSNull()
+        } else {
+            throw DecodingError.typeMismatch(
+                AnyCodable.self,
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Unsupported value in AnyCodable"
+                )
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+
+        switch value {
+        case let value as Bool:
+            try container.encode(value)
+        case let value as Int:
+            try container.encode(value)
+        case let value as Double:
+            try container.encode(value)
+        case let value as String:
+            try container.encode(value)
+        case let value as [String: Any]:
+            try container.encode(value.mapValues(AnyCodable.init))
+        case let value as [Any]:
+            try container.encode(value.map(AnyCodable.init))
+        case _ as NSNull:
+            try container.encodeNil()
+        default:
+            let context = EncodingError.Context(
+                codingPath: encoder.codingPath,
+                debugDescription: "Unsupported value in AnyCodable"
+            )
+            throw EncodingError.invalidValue(value, context)
+        }
+    }
+
+    public static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
+        switch (lhs.value, rhs.value) {
+        case let (left as Bool, right as Bool):
+            return left == right
+        case let (left as Int, right as Int):
+            return left == right
+        case let (left as Double, right as Double):
+            return left == right
+        case let (left as String, right as String):
+            return left == right
+        case let (left as [String: Any], right as [String: Any]):
+            return NSDictionary(dictionary: left).isEqual(to: right)
+        case let (left as [Any], right as [Any]):
+            return NSArray(array: left).isEqual(to: right)
+        case (_ as NSNull, _ as NSNull):
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+public protocol TruflagStorage {
+    func getItem(_ key: String) -> String?
+    func setItem(_ key: String, value: String)
+    func removeItem(_ key: String)
+}
+
+public final class UserDefaultsTruflagStorage: TruflagStorage {
+    private let defaults: UserDefaults
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    public func getItem(_ key: String) -> String? {
+        defaults.string(forKey: key)
+    }
+
+    public func setItem(_ key: String, value: String) {
+        defaults.set(value, forKey: key)
+    }
+
+    public func removeItem(_ key: String) {
+        defaults.removeObject(forKey: key)
+    }
+}
