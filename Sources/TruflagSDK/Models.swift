@@ -15,17 +15,29 @@ public struct TruflagConfigureOptions {
     public let user: TruflagUser?
     public let baseURL: URL
     public let requestTimeoutMs: Int
+    public let cacheTtlMs: Int
+    public let telemetryFlushIntervalMs: Int
+    public let telemetryBatchSize: Int
+    public let telemetryEnabled: Bool
 
     public init(
         apiKey: String,
         user: TruflagUser? = nil,
         baseURL: URL = URL(string: "https://sdk.truflag.com")!,
-        requestTimeoutMs: Int = 6000
+        requestTimeoutMs: Int = 6000,
+        cacheTtlMs: Int = 5 * 60_000,
+        telemetryFlushIntervalMs: Int = 10_000,
+        telemetryBatchSize: Int = 50,
+        telemetryEnabled: Bool = true
     ) {
         self.apiKey = apiKey
         self.user = user
         self.baseURL = baseURL
         self.requestTimeoutMs = requestTimeoutMs
+        self.cacheTtlMs = cacheTtlMs
+        self.telemetryFlushIntervalMs = telemetryFlushIntervalMs
+        self.telemetryBatchSize = telemetryBatchSize
+        self.telemetryEnabled = telemetryEnabled
     }
 }
 

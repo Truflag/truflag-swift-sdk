@@ -4,6 +4,11 @@
 
 `sdk/native/ios/TruflagSDK`
 
+## Example app
+
+- iOS sample app: `sdk/examples/ios-swift-sample`
+- Internal operations guide: `sdk/native/ios/TruflagSDK/EXAMPLE_APP.md`
+
 ## Features
 
 - Relay-backed flag evaluation fetches (`/v1/flags`)
