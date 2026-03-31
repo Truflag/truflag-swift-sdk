@@ -31,6 +31,8 @@ public actor TruflagClient {
         static let retryBaseDelayMs: UInt64 = 400
         static let retryMaxDelayMs: UInt64 = 8_000
         static let retryJitterRatio = 0.35
+        static let streamReconnectDelayMs: UInt64 = 2_000
+        static let streamConnectTimeoutMs: UInt64 = 5_000
     }
 
     private let session: URLSession
@@ -54,16 +56,35 @@ public actor TruflagClient {
     private var user: TruflagUser?
     private var flagsByKey: [String: TruflagFlag] = [:]
     private var latestConfigVersion: String?
+    private var lastErrorMessage: String?
     private var ready: Bool = false
 
     private var telemetryQueue: [[String: Any]] = []
     private var telemetryFlushTask: Task<Void, Never>?
     private var exposureIdentityByFlag: [String: String] = [:]
 
+    private var streamSocket: URLSessionWebSocketTask?
+    private var streamReceiveTask: Task<Void, Never>?
+    private var streamReconnectTask: Task<Void, Never>?
+    private var streamConnectTimeoutTask: Task<Void, Never>?
+    private var pollingTask: Task<Void, Never>?
+    private var streamStatus: String = "idle"
+    private var pollingActive: Bool = false
+    private var lastStreamEventAt: String?
+    private var lastStreamEventVersion: String?
+
+    private var subscribers: [UUID: @Sendable () -> Void] = [:]
+    private var lastSubscriberStateFingerprint: String = ""
+    private var flagSubscribers: [UUID: (key: String, callback: @Sendable (TruflagFlag?) -> Void)] = [:]
+    private var lastFlagSubscriberIdentityByToken: [UUID: String] = [:]
+    private var logSubscribers: [UUID: @Sendable (String) -> Void] = [:]
+    private var debugLoggingEnabled: Bool = false
+
     private var configureSignature: String?
     private var configureInFlight: Task<Void, Error>?
     private var pendingExpectedConfigVersion: String?
     private var refreshInFlight: Task<Void, Error>?
+    private var nextRefreshTraceID: Int64 = 0
 
     public init(
         storage: TruflagStorage = UserDefaultsTruflagStorage(),
@@ -76,6 +97,8 @@ public actor TruflagClient {
     }
 
     public func configure(_ options: TruflagConfigureOptions) async throws {
+        debugLoggingEnabled = options.debugLoggingEnabled
+        logDebug("configure() called")
         let signature = buildConfigureSignature(options)
         if let inFlight = configureInFlight, configureSignature == signature {
             return try await inFlight.value
@@ -104,17 +127,24 @@ public actor TruflagClient {
         }
 
         stopTelemetryFlush()
+        stopStreaming()
+        stopPolling()
         configureSignature = signature
         exposureIdentityByFlag = [:]
+        lastErrorMessage = nil
         options = TruflagConfigureOptions(
             apiKey: trimmedKey,
             user: rawOptions.user,
             baseURL: rawOptions.baseURL,
+            streamURL: rawOptions.streamURL,
+            streamEnabled: rawOptions.streamEnabled,
+            pollingIntervalMs: max(1_000, rawOptions.pollingIntervalMs),
             requestTimeoutMs: rawOptions.requestTimeoutMs,
             cacheTtlMs: max(1, rawOptions.cacheTtlMs),
             telemetryFlushIntervalMs: max(100, rawOptions.telemetryFlushIntervalMs),
             telemetryBatchSize: max(1, rawOptions.telemetryBatchSize),
-            telemetryEnabled: rawOptions.telemetryEnabled
+            telemetryEnabled: rawOptions.telemetryEnabled,
+            debugLoggingEnabled: rawOptions.debugLoggingEnabled
         )
 
         guard let options else { throw TruflagError.notConfigured }
@@ -143,22 +173,37 @@ public actor TruflagClient {
             ready = false
         }
 
+        notifySubscribersIfStateChanged()
         startTelemetryFlush()
 
-        let startupVersion = await fetchPublishedConfigVersionNoThrow()
-        try await refresh(expectedConfigVersion: startupVersion)
+        startStreamOrPolling()
+        logDebug("configure() completed; initial refresh running in background")
+        // Keep configure fast: kick off initial refresh in background.
+        Task {
+            do {
+                try await self.refresh(source: "configure_background")
+            } catch {
+                // Background startup refresh failures are surfaced via state.
+            }
+        }
     }
 
     public func refresh(expectedConfigVersion: String? = nil) async throws {
+        try await refresh(expectedConfigVersion: expectedConfigVersion, source: "manual")
+    }
+
+    private func refresh(expectedConfigVersion: String? = nil, source: String) async throws {
+        logDebug("refresh() called source=\(source) expectedConfigVersion=\(expectedConfigVersion ?? "-")")
         if let expectedConfigVersion, !expectedConfigVersion.isEmpty {
             pendingExpectedConfigVersion = expectedConfigVersion
         }
         if let inFlight = refreshInFlight {
+            logDebug("refresh() source=\(source) joined in-flight refresh")
             return try await inFlight.value
         }
 
         let task = Task {
-            try await drainRefreshQueue()
+            try await drainRefreshQueue(source: source)
         }
         refreshInFlight = task
         do {
@@ -170,12 +215,12 @@ public actor TruflagClient {
         refreshInFlight = nil
     }
 
-    private func drainRefreshQueue() async throws {
+    private func drainRefreshQueue(source: String) async throws {
         var expected = pendingExpectedConfigVersion
         pendingExpectedConfigVersion = nil
 
         while true {
-            try await refreshInternal(expectedConfigVersion: expected)
+            try await refreshInternal(expectedConfigVersion: expected, source: source)
             let pending = pendingExpectedConfigVersion
             pendingExpectedConfigVersion = nil
             guard let next = pending, !next.isEmpty, next != latestConfigVersion else {
@@ -185,35 +230,64 @@ public actor TruflagClient {
         }
     }
 
-    private func refreshInternal(expectedConfigVersion: String?) async throws {
+    private func refreshInternal(expectedConfigVersion: String?, source: String) async throws {
+        let startedAtMs = nowMs()
+        nextRefreshTraceID += 1
+        let traceID = nextRefreshTraceID
+        logDebug("refreshInternal[\(traceID)] start source=\(source) expectedConfigVersion=\(expectedConfigVersion ?? "-")")
         do {
             var response = try await fetchFlags(expectedConfigVersion: expectedConfigVersion, bypassRuntimeCache: false)
+            let firstFetchDoneAtMs = nowMs()
+            logDebug("refreshInternal[\(traceID)] stage=afterFetch1 elapsedMs=\(firstFetchDoneAtMs - startedAtMs) stale=\(response.meta?.staleConfig == true)")
             if response.meta?.staleConfig == true {
                 response = try await fetchFlags(expectedConfigVersion: expectedConfigVersion, bypassRuntimeCache: true)
+                let secondFetchDoneAtMs = nowMs()
+                logDebug("refreshInternal[\(traceID)] stage=afterFetch2 elapsedMs=\(secondFetchDoneAtMs - startedAtMs) deltaMs=\(secondFetchDoneAtMs - firstFetchDoneAtMs)")
             }
 
             let fetchedAt = nowMs()
+            logDebug("refreshInternal[\(traceID)] stage=beforeApply elapsedMs=\(fetchedAt - startedAtMs)")
             applyFlags(from: response.flags, configVersion: response.meta?.configVersion)
+            let afterApplyAtMs = nowMs()
+            logDebug("refreshInternal[\(traceID)] stage=afterApply elapsedMs=\(afterApplyAtMs - startedAtMs) deltaMs=\(afterApplyAtMs - fetchedAt)")
             ready = true
+            lastErrorMessage = nil
+            logDebug("refreshInternal[\(traceID)] stage=beforePersist elapsedMs=\(nowMs() - startedAtMs)")
             try persistCachedSnapshot(flags: response.flags, fetchedAt: fetchedAt)
+            let afterPersistAtMs = nowMs()
+            logDebug("refreshInternal[\(traceID)] stage=afterPersist elapsedMs=\(afterPersistAtMs - startedAtMs) deltaMs=\(afterPersistAtMs - afterApplyAtMs)")
+            logDebug("refreshInternal[\(traceID)] stage=beforeNotify elapsedMs=\(nowMs() - startedAtMs)")
+            notifySubscribersIfStateChanged()
+            let afterNotifyAtMs = nowMs()
+            logDebug("refreshInternal[\(traceID)] stage=afterNotify elapsedMs=\(afterNotifyAtMs - startedAtMs) deltaMs=\(afterNotifyAtMs - afterPersistAtMs)")
+            let uniqueCount = Set(response.flags.map { $0.key }).count
+            logDebug(
+                "refreshInternal[\(traceID)] success source=\(source) version=\(response.meta?.configVersion ?? "-") flagsRaw=\(response.flags.count) flagsUnique=\(uniqueCount) totalMs=\(afterNotifyAtMs - startedAtMs) applyMs=\(afterApplyAtMs - fetchedAt) persistMs=\(afterPersistAtMs - afterApplyAtMs) notifyMs=\(afterNotifyAtMs - afterPersistAtMs)"
+            )
         } catch {
             if !flagsByKey.isEmpty {
                 ready = true
             }
+            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            notifySubscribersIfStateChanged()
+            logDebug("refreshInternal[\(traceID)] failed source=\(source): \(String(describing: error))")
             throw error
         }
     }
 
     public func login(user: TruflagUser) async throws {
+        logDebug("login() userId=\(user.id)")
         _ = try getOptionsOrThrow()
         let nextUser = try normalizeUser(user)
         self.user = nextUser
         exposureIdentityByFlag = [:]
         try persistUser(nextUser)
-        try await refresh()
+        try await refresh(source: "login")
+        notifySubscribersIfStateChanged()
     }
 
     public func setAttributes(_ attributes: [String: AnyCodable]) async throws {
+        logDebug("setAttributes() count=\(attributes.count)")
         _ = try getOptionsOrThrow()
         guard let currentUser = user else { throw TruflagError.notConfigured }
         try validateAttributes(attributes)
@@ -225,28 +299,149 @@ public actor TruflagClient {
         user = nextUser
         exposureIdentityByFlag = [:]
         try persistUser(nextUser)
-        try await refresh()
+        try await refresh(source: "setAttributes")
+        notifySubscribersIfStateChanged()
     }
 
     public func logout() async throws {
+        logDebug("logout() called")
         _ = try getOptionsOrThrow()
         let anonymous = TruflagUser(id: try ensureAnonymousId(), attributes: ["anonymous": AnyCodable(true)])
         user = anonymous
         exposureIdentityByFlag = [:]
         try persistUser(anonymous)
-        try await refresh()
+        try await refresh(source: "logout")
+        notifySubscribersIfStateChanged()
     }
 
     public func isReady() -> Bool {
         ready
     }
 
+    public func subscribe(_ callback: @escaping @Sendable () -> Void) -> UUID {
+        let token = UUID()
+        subscribers[token] = callback
+        callback()
+        return token
+    }
+
+    public func unsubscribe(_ token: UUID) {
+        subscribers.removeValue(forKey: token)
+    }
+
+    public func stateStream(
+        bufferingPolicy: AsyncStream<TruflagClientState>.Continuation.BufferingPolicy = .bufferingNewest(1)
+    ) -> AsyncStream<TruflagClientState> {
+        AsyncStream(bufferingPolicy: bufferingPolicy) { continuation in
+            let token = self.subscribe { [weak self] in
+                guard let self else { return }
+                Task {
+                    let state = await self.getState()
+                    continuation.yield(state)
+                }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                Task {
+                    await self.unsubscribe(token)
+                }
+            }
+        }
+    }
+
+    public func subscribeFlag(_ key: String, callback: @escaping @Sendable (TruflagFlag?) -> Void) -> UUID {
+        let token = UUID()
+        flagSubscribers[token] = (key: key, callback: callback)
+        let value = flagsByKey[key]
+        callback(value)
+        lastFlagSubscriberIdentityByToken[token] = buildFlagSubscriberIdentity(flag: value)
+        return token
+    }
+
+    public func unsubscribeFlag(_ token: UUID) {
+        flagSubscribers.removeValue(forKey: token)
+        lastFlagSubscriberIdentityByToken.removeValue(forKey: token)
+    }
+
+    public func flagStream(
+        _ key: String,
+        bufferingPolicy: AsyncStream<TruflagFlag?>.Continuation.BufferingPolicy = .bufferingNewest(1)
+    ) -> AsyncStream<TruflagFlag?> {
+        AsyncStream(bufferingPolicy: bufferingPolicy) { continuation in
+            let token = self.subscribeFlag(key) { flag in
+                continuation.yield(flag)
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                Task {
+                    await self.unsubscribeFlag(token)
+                }
+            }
+        }
+    }
+
+    public func subscribeDebugLogs(_ callback: @escaping @Sendable (String) -> Void) -> UUID {
+        let token = UUID()
+        logSubscribers[token] = callback
+        callback("[TruflagSDK][DEBUG][\(iso8601Now())] Debug log stream connected")
+        return token
+    }
+
+    public func unsubscribeDebugLogs(_ token: UUID) {
+        logSubscribers.removeValue(forKey: token)
+    }
+
+    public func debugLogStream(
+        bufferingPolicy: AsyncStream<String>.Continuation.BufferingPolicy = .bufferingNewest(200)
+    ) -> AsyncStream<String> {
+        AsyncStream(bufferingPolicy: bufferingPolicy) { continuation in
+            let token = self.subscribeDebugLogs { line in
+                continuation.yield(line)
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                Task {
+                    await self.unsubscribeDebugLogs(token)
+                }
+            }
+        }
+    }
+
+    public func getState() -> TruflagClientState {
+        TruflagClientState(
+            configured: options != nil,
+            ready: ready,
+            userId: user?.id ?? "",
+            flags: flagsByKey,
+            configVersion: latestConfigVersion,
+            lastError: lastErrorMessage,
+            streamStatus: streamStatus,
+            pollingActive: pollingActive,
+            lastStreamEventAt: lastStreamEventAt,
+            lastStreamEventVersion: lastStreamEventVersion
+        )
+    }
+
+    public func waitForInFlightRefresh(timeoutMs: Int = 1500) async {
+        guard let task = refreshInFlight else { return }
+        _ = try? await withTimeout(
+            promise: {
+                _ = try await task.value
+                return true
+            },
+            timeoutMs: max(1, timeoutMs),
+            message: "Timed out while waiting for in-flight refresh."
+        )
+    }
+
     public func notifyFlagRead(flagKey: String) {
+        logDebug("notifyFlagRead() flagKey=\(flagKey)")
         guard ready, let flag = flagsByKey[flagKey] else { return }
         enqueueExposure(flag: flag, extraProperties: nil)
     }
 
     public func getFlag<T>(_ key: String, defaultValue: T) -> T {
+        logDebug("getFlag() key=\(key)")
         guard ready, let flag = flagsByKey[key] else { return defaultValue }
         enqueueExposure(flag: flag, extraProperties: nil)
         if let typed = flag.value.value as? T {
@@ -261,6 +456,7 @@ public actor TruflagClient {
     }
 
     public func getAllFlags() -> [String: Any] {
+        logDebug("getAllFlags() called")
         var out: [String: Any] = [:]
         for (key, flag) in flagsByKey {
             enqueueExposure(flag: flag, extraProperties: nil)
@@ -270,6 +466,7 @@ public actor TruflagClient {
     }
 
     public func track(eventName: String, properties: [String: AnyCodable] = [:]) async throws {
+        logDebug("track() event=\(eventName)")
         _ = try getOptionsOrThrow()
         guard !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
@@ -295,6 +492,7 @@ public actor TruflagClient {
     }
 
     public func expose(flagKey: String) async throws {
+        logDebug("expose() flagKey=\(flagKey)")
         _ = try getOptionsOrThrow()
         guard let flag = flagsByKey[flagKey] else { return }
         enqueueExposure(flag: flag, extraProperties: nil)
@@ -304,11 +502,15 @@ public actor TruflagClient {
     }
 
     public func destroy() {
+        logDebug("destroy() called")
         stopTelemetryFlush()
+        stopStreaming()
+        stopPolling()
         options = nil
         user = nil
         flagsByKey = [:]
         latestConfigVersion = nil
+        lastErrorMessage = nil
         ready = false
         telemetryQueue = []
         exposureIdentityByFlag = [:]
@@ -316,6 +518,13 @@ public actor TruflagClient {
         configureSignature = nil
         refreshInFlight = nil
         pendingExpectedConfigVersion = nil
+        lastSubscriberStateFingerprint = ""
+        lastStreamEventAt = nil
+        lastStreamEventVersion = nil
+        flagSubscribers = [:]
+        lastFlagSubscriberIdentityByToken = [:]
+        logSubscribers = [:]
+        notifySubscribersIfStateChanged()
     }
 
     private func getOptionsOrThrow() throws -> TruflagConfigureOptions {
@@ -492,14 +701,27 @@ public actor TruflagClient {
         request.httpMethod = "GET"
         request.timeoutInterval = TimeInterval(requestTimeoutMs) / 1000.0
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        let startedAt = Date().timeIntervalSince1970
+        logDebug("HTTP GET \(url.absoluteString)")
 
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            let elapsedMs = Int((Date().timeIntervalSince1970 - startedAt) * 1000)
+            logDebug("HTTP GET network error ms=\(elapsedMs) url=\(url.absoluteString) error=\(String(describing: error))")
+            throw error
+        }
         guard let http = response as? HTTPURLResponse else {
             throw TruflagError.networkFailed
         }
         guard (200..<300).contains(http.statusCode) else {
+            logDebug("HTTP GET failed status=\(http.statusCode) url=\(url.absoluteString)")
             throw TruflagError.httpError(statusCode: http.statusCode)
         }
+        let elapsedMs = Int((Date().timeIntervalSince1970 - startedAt) * 1000)
+        logDebug("HTTP GET success status=\(http.statusCode) ms=\(elapsedMs) bytes=\(data.count)")
 
         return data
     }
@@ -521,20 +743,35 @@ public actor TruflagClient {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
+        let startedAt = Date().timeIntervalSince1970
+        logDebug("HTTP POST \(url.absoluteString)")
 
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            let elapsedMs = Int((Date().timeIntervalSince1970 - startedAt) * 1000)
+            logDebug("HTTP POST network error ms=\(elapsedMs) url=\(url.absoluteString) error=\(String(describing: error))")
+            throw error
+        }
         guard let http = response as? HTTPURLResponse else {
             throw TruflagError.networkFailed
         }
         guard (200..<300).contains(http.statusCode) else {
+            logDebug("HTTP POST failed status=\(http.statusCode) url=\(url.absoluteString)")
             throw TruflagError.httpError(statusCode: http.statusCode)
         }
+        let elapsedMs = Int((Date().timeIntervalSince1970 - startedAt) * 1000)
+        logDebug("HTTP POST success status=\(http.statusCode) ms=\(elapsedMs) bytes=\(data.count)")
 
         return data
     }
 
     private func enqueueTelemetryEvent(_ event: [String: Any]) {
         telemetryQueue.append(event)
+        let name = event["name"] as? String ?? "unknown"
+        logDebug("telemetry queued name=\(name) queueSize=\(telemetryQueue.count)")
     }
 
     private func startTelemetryFlush() {
@@ -557,12 +794,19 @@ public actor TruflagClient {
 
     private func flushTelemetry() async {
         guard let options else { return }
-        if options.telemetryEnabled == false { return }
-        if telemetryQueue.isEmpty { return }
+        if options.telemetryEnabled == false {
+            logDebug("flushTelemetry() skipped telemetry disabled")
+            return
+        }
+        if telemetryQueue.isEmpty {
+            logDebug("flushTelemetry() skipped queue empty")
+            return
+        }
 
         let batchSize = max(1, options.telemetryBatchSize)
         let batch = Array(telemetryQueue.prefix(batchSize))
         let outboundEvents = dedupeExposureEvents(in: batch)
+        logDebug("flushTelemetry() sending batchSize=\(batch.count) outboundAfterDedupe=\(outboundEvents.count)")
         let body: [String: AnyCodable] = [
             "events": AnyCodable(outboundEvents),
         ]
@@ -575,8 +819,10 @@ public actor TruflagClient {
                 body: body
             )
             telemetryQueue.removeFirst(batch.count)
+            logDebug("flushTelemetry() success removed=\(batch.count) queueRemaining=\(telemetryQueue.count)")
         } catch {
             // Keep events queued for a later attempt.
+            logDebug("flushTelemetry() failed error=\(String(describing: error)) queueRetained=\(telemetryQueue.count)")
         }
     }
 
@@ -615,10 +861,12 @@ public actor TruflagClient {
         let payload = normalizedPayload(flag.payload)
         let identity = buildExposureIdentity(flag: flag, payload: payload)
         if exposureIdentityByFlag[flag.key] == identity {
+            logDebug("enqueueExposure() dedup skip flagKey=\(flag.key) reason=identity_cache")
             return
         }
         if hasQueuedExposure(flagKey: flag.key, payload: payload) {
             exposureIdentityByFlag[flag.key] = identity
+            logDebug("enqueueExposure() dedup skip flagKey=\(flag.key) reason=queue_contains")
             return
         }
         exposureIdentityByFlag[flag.key] = identity
@@ -681,6 +929,7 @@ public actor TruflagClient {
         }
 
         enqueueTelemetryEvent(event)
+        logDebug("enqueueExposure() queued flagKey=\(flag.key)")
     }
 
     private func hasQueuedExposure(flagKey: String, payload: [String: Any]) -> Bool {
@@ -752,17 +1001,20 @@ public actor TruflagClient {
         return String(describing: value)
     }
 
-    private func withRetry<T>(_ operation: @escaping () async throws -> T) async throws -> T {
+    private func withRetry<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
         var lastError: Error?
         for attempt in 0..<Defaults.retryAttempts {
             do {
+                logDebug("withRetry() attempt=\(attempt + 1)/\(Defaults.retryAttempts)")
                 return try await operation()
             } catch {
                 lastError = error
+                logDebug("withRetry() attempt=\(attempt + 1) failed error=\(String(describing: error))")
                 if attempt == Defaults.retryAttempts - 1 {
                     break
                 }
                 let delay = computeRetryDelay(attempt: attempt)
+                logDebug("withRetry() sleepingMs=\(delay)")
                 try await Task.sleep(nanoseconds: delay * 1_000_000)
             }
         }
@@ -786,6 +1038,9 @@ public actor TruflagClient {
         return [
             "apiKey=\(options.apiKey)",
             "baseURL=\(options.baseURL.absoluteString)",
+            "streamURL=\(options.streamURL.absoluteString)",
+            "streamEnabled=\(options.streamEnabled)",
+            "pollingIntervalMs=\(options.pollingIntervalMs)",
             "userID=\(options.user?.id ?? "")",
             "attrs=\(normalizedAttrs.joined(separator: ","))",
             "requestTimeoutMs=\(options.requestTimeoutMs)",
@@ -793,7 +1048,303 @@ public actor TruflagClient {
             "telemetryFlushIntervalMs=\(options.telemetryFlushIntervalMs)",
             "telemetryBatchSize=\(options.telemetryBatchSize)",
             "telemetryEnabled=\(options.telemetryEnabled)",
+            "debugLoggingEnabled=\(options.debugLoggingEnabled)",
         ].joined(separator: "|")
+    }
+
+    private func startStreamOrPolling() {
+        guard let options else { return }
+        if options.streamEnabled {
+            logDebug("startStreamOrPolling() -> stream")
+            startStreaming()
+        } else {
+            logDebug("startStreamOrPolling() -> polling")
+            setStreamStatus("disabled")
+            startPolling()
+        }
+    }
+
+    private func startPolling() {
+        stopPolling()
+        guard let options else { return }
+        setPollingActive(true)
+        if options.streamEnabled {
+            setStreamStatus("polling_fallback")
+        } else {
+            setStreamStatus("polling_only")
+        }
+        let intervalMs = max(1_000, options.pollingIntervalMs)
+        logDebug("startPolling() intervalMs=\(intervalMs)")
+        pollingTask = Task {
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(intervalMs) * 1_000_000)
+                    try Task.checkCancellation()
+                    try await self.refresh(source: "poll")
+                } catch is CancellationError {
+                    break
+                } catch {
+                    // Poll refresh failures are best-effort; stream or next poll will retry.
+                }
+            }
+        }
+    }
+
+    private func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
+        setPollingActive(false)
+        logDebug("stopPolling()")
+    }
+
+    private func startStreaming() {
+        stopStreaming()
+        guard let options else { return }
+        setStreamStatus("connecting")
+        logDebug("startStreaming() streamURL=\(options.streamURL.absoluteString)")
+
+        var components = URLComponents(url: options.streamURL, resolvingAgainstBaseURL: false)
+        var items = components?.queryItems ?? []
+        items.append(URLQueryItem(name: "apiKey", value: options.apiKey))
+        components?.queryItems = items
+        guard let socketURL = components?.url else {
+            setStreamStatus("invalid_stream_url")
+            logDebug("startStreaming() invalid stream URL")
+            startPolling()
+            return
+        }
+
+        let socket = session.webSocketTask(with: socketURL)
+        streamSocket = socket
+        socket.resume()
+        startStreamConnectTimeout()
+
+        streamReceiveTask = Task {
+            await self.syncOnStreamOpen()
+            await self.receiveStreamLoop()
+        }
+    }
+
+    private func stopStreaming() {
+        streamReconnectTask?.cancel()
+        streamReconnectTask = nil
+        streamConnectTimeoutTask?.cancel()
+        streamConnectTimeoutTask = nil
+
+        streamReceiveTask?.cancel()
+        streamReceiveTask = nil
+
+        if let socket = streamSocket {
+            socket.cancel(with: .goingAway, reason: nil)
+        }
+        streamSocket = nil
+        setStreamStatus("stopped")
+        logDebug("stopStreaming()")
+    }
+
+    private func startStreamConnectTimeout() {
+        streamConnectTimeoutTask?.cancel()
+        streamConnectTimeoutTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: Defaults.streamConnectTimeoutMs * 1_000_000)
+                try Task.checkCancellation()
+                guard self.streamStatus == "connecting" else { return }
+                self.logDebug("stream connect timeout; enabling polling fallback and scheduling reconnect")
+                self.setStreamStatus("polling_fallback")
+                self.startPolling()
+                if let socket = self.streamSocket {
+                    socket.cancel(with: .goingAway, reason: nil)
+                }
+                self.streamSocket = nil
+                self.streamReceiveTask?.cancel()
+                self.streamReceiveTask = nil
+                self.scheduleStreamReconnect()
+            } catch {
+                // Cancelled.
+            }
+            self.streamConnectTimeoutTask = nil
+        }
+    }
+
+    private func scheduleStreamReconnect() {
+        guard options?.streamEnabled == true else { return }
+        guard streamReconnectTask == nil else { return }
+        setStreamStatus("reconnecting")
+        logDebug("scheduleStreamReconnect()")
+        streamReconnectTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: Defaults.streamReconnectDelayMs * 1_000_000)
+                try Task.checkCancellation()
+                self.startStreaming()
+            } catch {
+                // Cancelled.
+            }
+            self.clearStreamReconnectTask()
+        }
+    }
+
+    private func clearStreamReconnectTask() {
+        streamReconnectTask = nil
+    }
+
+    private func syncOnStreamOpen() async {
+        streamConnectTimeoutTask?.cancel()
+        streamConnectTimeoutTask = nil
+        setStreamStatus("connected")
+        logDebug("syncOnStreamOpen()")
+        let published = await fetchPublishedConfigVersionNoThrow()
+        if let published, let latest = latestConfigVersion, published == latest {
+            stopPolling()
+            setStreamStatus("connected")
+            logDebug("syncOnStreamOpen() config already current")
+            return
+        }
+        do {
+            try await refresh(expectedConfigVersion: published, source: "stream_sync")
+            stopPolling()
+            setStreamStatus("connected")
+            logDebug("syncOnStreamOpen() refresh success")
+        } catch {
+            startPolling()
+            setStreamStatus("polling_fallback")
+            logDebug("syncOnStreamOpen() refresh failed, fallback polling")
+        }
+    }
+
+    private func receiveStreamLoop() async {
+        guard let socket = streamSocket else { return }
+        while !Task.isCancelled {
+            do {
+                let message = try await socket.receive()
+                switch message {
+                case .string(let text):
+                    await handleStreamMessage(text)
+                case .data(let data):
+                    if let text = String(data: data, encoding: .utf8) {
+                        await handleStreamMessage(text)
+                    }
+                @unknown default:
+                    break
+                }
+            } catch {
+                logDebug("receiveStreamLoop() receive error: \(String(describing: error))")
+                break
+            }
+        }
+        setStreamStatus("disconnected")
+        startPolling()
+        scheduleStreamReconnect()
+    }
+
+    private func handleStreamMessage(_ raw: String) async {
+        guard let data = raw.data(using: .utf8) else { return }
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let type = object["type"] as? String,
+            type == "config_published"
+        else {
+            return
+        }
+
+        let version = object["version"] as? String
+        logDebug("stream event config_published version=\(version ?? "-")")
+        lastStreamEventAt = iso8601Now()
+        lastStreamEventVersion = version
+        notifySubscribersIfStateChanged()
+        if let version, let latest = latestConfigVersion, version == latest {
+            return
+        }
+
+        do {
+            try await refresh(expectedConfigVersion: version, source: "stream_event")
+        } catch {
+            // Poll fallback already active.
+        }
+    }
+
+    private func notifySubscribersIfStateChanged() {
+        let state = getState()
+        let fingerprint = buildStateFingerprint(state)
+        if fingerprint == lastSubscriberStateFingerprint {
+            return
+        }
+        lastSubscriberStateFingerprint = fingerprint
+        for callback in subscribers.values {
+            Task { @MainActor in
+                callback()
+            }
+        }
+        notifyFlagSubscribers()
+    }
+
+    private func notifyFlagSubscribers() {
+        guard !flagSubscribers.isEmpty else { return }
+        for (token, item) in flagSubscribers {
+            let flag = flagsByKey[item.key]
+            let nextIdentity = buildFlagSubscriberIdentity(flag: flag)
+            if lastFlagSubscriberIdentityByToken[token] == nextIdentity {
+                continue
+            }
+            lastFlagSubscriberIdentityByToken[token] = nextIdentity
+            Task { @MainActor in
+                item.callback(flag)
+            }
+        }
+    }
+
+    private func buildFlagSubscriberIdentity(flag: TruflagFlag?) -> String {
+        guard let flag else { return "nil" }
+        let payload = normalizedPayload(flag.payload)
+        let valueHash = fingerprintTelemetryValue(flag.value.value)
+        let variation = payload["variationId"] as? String ?? ""
+        let assignment = payload["assignmentId"] as? String ?? ""
+        return "\(flag.key)|\(valueHash)|\(variation)|\(assignment)"
+    }
+
+    private func buildStateFingerprint(_ state: TruflagClientState) -> String {
+        let flagParts = state.flags.keys.sorted().map { key -> String in
+            guard let flag = state.flags[key] else { return key }
+            let payload = normalizedPayload(flag.payload)
+            let valueHash = fingerprintTelemetryValue(flag.value.value)
+            let variation = payload["variationId"] as? String ?? ""
+            let assignment = payload["assignmentId"] as? String ?? ""
+            return "\(key):\(valueHash):\(variation):\(assignment)"
+        }
+
+        return [
+            "configured=\(state.configured)",
+            "ready=\(state.ready)",
+            "user=\(state.userId)",
+            "version=\(state.configVersion ?? "")",
+            "error=\(state.lastError ?? "")",
+            "stream=\(state.streamStatus)",
+            "polling=\(state.pollingActive)",
+            "lastEventAt=\(state.lastStreamEventAt ?? "")",
+            "lastEventVersion=\(state.lastStreamEventVersion ?? "")",
+            "flags=\(flagParts.joined(separator: ","))",
+        ].joined(separator: "|")
+    }
+
+    private func setStreamStatus(_ status: String) {
+        guard streamStatus != status else { return }
+        streamStatus = status
+        notifySubscribersIfStateChanged()
+    }
+
+    private func setPollingActive(_ active: Bool) {
+        guard pollingActive != active else { return }
+        pollingActive = active
+        notifySubscribersIfStateChanged()
+    }
+
+    private func logDebug(_ message: String) {
+        guard debugLoggingEnabled else { return }
+        let line = "[TruflagSDK][DEBUG][\(iso8601Now())] \(message)"
+        for callback in logSubscribers.values {
+            Task { @MainActor in
+                callback(line)
+            }
+        }
     }
 
     private func urlEncode(_ value: String) -> String {
@@ -825,7 +1376,7 @@ public enum TruflagError: Error, Equatable {
     case blockedAttributeKeys([String])
 }
 
-private func withTimeout<T>(promise: @escaping @Sendable () async throws -> T, timeoutMs: Int, message: String) async throws -> T {
+private func withTimeout<T: Sendable>(promise: @escaping @Sendable () async throws -> T, timeoutMs: Int, message: String) async throws -> T {
     let timeoutTask = Task<T, Error> {
         try await Task.sleep(nanoseconds: UInt64(max(1, timeoutMs)) * 1_000_000)
         throw NSError(domain: "TruflagTimeout", code: 1, userInfo: [NSLocalizedDescriptionKey: message])

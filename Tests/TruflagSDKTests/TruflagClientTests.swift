@@ -434,7 +434,16 @@ private final class URLProtocolMock: URLProtocol {
 
     override func startLoading() {
         guard let handler = URLProtocolMock.handler else {
-            fatalError("URLProtocolMock.handler not set")
+            let response = HTTPURLResponse(
+                url: request.url ?? URL(string: "https://sdk.truflag.com")!,
+                statusCode: 500,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data("{\"error\":\"handler_not_set\"}".utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
         }
 
         let (statusCode, data) = handler(request)

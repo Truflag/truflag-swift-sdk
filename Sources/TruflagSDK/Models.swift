@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TruflagUser: Codable, Equatable {
+public struct TruflagUser: Codable, Equatable, Sendable {
     public let id: String
     public let attributes: [String: AnyCodable]?
 
@@ -10,38 +10,50 @@ public struct TruflagUser: Codable, Equatable {
     }
 }
 
-public struct TruflagConfigureOptions {
+public struct TruflagConfigureOptions: Sendable {
     public let apiKey: String
     public let user: TruflagUser?
     public let baseURL: URL
+    public let streamURL: URL
+    public let streamEnabled: Bool
+    public let pollingIntervalMs: Int
     public let requestTimeoutMs: Int
     public let cacheTtlMs: Int
     public let telemetryFlushIntervalMs: Int
     public let telemetryBatchSize: Int
     public let telemetryEnabled: Bool
+    public let debugLoggingEnabled: Bool
 
     public init(
         apiKey: String,
         user: TruflagUser? = nil,
         baseURL: URL = URL(string: "https://sdk.truflag.com")!,
+        streamURL: URL = URL(string: "wss://stream.sdk.truflag.com")!,
+        streamEnabled: Bool = true,
+        pollingIntervalMs: Int = 60_000,
         requestTimeoutMs: Int = 6000,
         cacheTtlMs: Int = 5 * 60_000,
         telemetryFlushIntervalMs: Int = 10_000,
         telemetryBatchSize: Int = 50,
-        telemetryEnabled: Bool = true
+        telemetryEnabled: Bool = true,
+        debugLoggingEnabled: Bool = false
     ) {
         self.apiKey = apiKey
         self.user = user
         self.baseURL = baseURL
+        self.streamURL = streamURL
+        self.streamEnabled = streamEnabled
+        self.pollingIntervalMs = pollingIntervalMs
         self.requestTimeoutMs = requestTimeoutMs
         self.cacheTtlMs = cacheTtlMs
         self.telemetryFlushIntervalMs = telemetryFlushIntervalMs
         self.telemetryBatchSize = telemetryBatchSize
         self.telemetryEnabled = telemetryEnabled
+        self.debugLoggingEnabled = debugLoggingEnabled
     }
 }
 
-public struct TruflagFlag: Codable, Equatable {
+public struct TruflagFlag: Codable, Equatable, Sendable {
     public let key: String
     public let value: AnyCodable
     public let payload: [String: AnyCodable]?
@@ -51,6 +63,19 @@ public struct TruflagFlag: Codable, Equatable {
         self.value = value
         self.payload = payload
     }
+}
+
+public struct TruflagClientState: Equatable, Sendable {
+    public let configured: Bool
+    public let ready: Bool
+    public let userId: String
+    public let flags: [String: TruflagFlag]
+    public let configVersion: String?
+    public let lastError: String?
+    public let streamStatus: String
+    public let pollingActive: Bool
+    public let lastStreamEventAt: String?
+    public let lastStreamEventVersion: String?
 }
 
 struct TruflagRemoteFlagsMeta: Codable {
@@ -63,7 +88,7 @@ struct TruflagRemoteFlagsResponse: Codable {
     let meta: TruflagRemoteFlagsMeta?
 }
 
-public struct AnyCodable: Codable, Equatable {
+public struct AnyCodable: Codable, Equatable, @unchecked Sendable {
     public let value: Any
 
     public init(_ value: Any) {
