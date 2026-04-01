@@ -101,7 +101,7 @@ final class TruflagClientTests: XCTestCase {
     }
 
     func testTrackSendsBatch() async throws {
-        var sawEventsBatch = false
+        let eventsBatchExpectation = expectation(description: "events batch posted")
         let session = makeSession()
         let baseURL = makeBaseURL()
         URLProtocolMock.setHandler(for: baseURL) { request in
@@ -121,7 +121,7 @@ final class TruflagClientTests: XCTestCase {
                 if let body = request.httpBody,
                    let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
                    object["events"] != nil {
-                    sawEventsBatch = true
+                    eventsBatchExpectation.fulfill()
                 }
                 return (202, Data("{\"accepted\":1}".utf8))
             }
@@ -138,8 +138,7 @@ final class TruflagClientTests: XCTestCase {
             )
         )
         try await client.track(eventName: "checkout_completed", properties: ["value": AnyCodable(1)])
-
-        XCTAssertTrue(sawEventsBatch)
+        await fulfillment(of: [eventsBatchExpectation], timeout: 1.0)
     }
 
     func testTrackImmediateFlushesEvenWhenBelowBatchSize() async throws {
@@ -266,7 +265,7 @@ final class TruflagClientTests: XCTestCase {
     }
 
     func testExposeSendsExposureEventPayload() async throws {
-        var receivedExposureEvent = false
+        let exposureEventExpectation = expectation(description: "exposure event posted")
         let session = makeSession()
         let baseURL = makeBaseURL()
         URLProtocolMock.setHandler(for: baseURL) { request in
@@ -293,7 +292,7 @@ final class TruflagClientTests: XCTestCase {
                    let properties = first["properties"] as? [String: Any],
                    properties["flagKey"] as? String == "economyvariation",
                    properties["reason"] as? String == "experimentArm" {
-                    receivedExposureEvent = true
+                    exposureEventExpectation.fulfill()
                 }
                 return (202, Data("{\"accepted\":1}".utf8))
             }
@@ -310,8 +309,7 @@ final class TruflagClientTests: XCTestCase {
             )
         )
         try await client.expose(flagKey: "economyvariation")
-
-        XCTAssertTrue(receivedExposureEvent)
+        await fulfillment(of: [exposureEventExpectation], timeout: 1.0)
     }
 
     private func makeSession() -> URLSession {
