@@ -6,16 +6,6 @@ import XCTest
 @testable import TruflagSDK
 
 final class TruflagClientTests: XCTestCase {
-    override class func setUp() {
-        super.setUp()
-        URLProtocolMock.reset()
-    }
-
-    override func setUp() {
-        super.setUp()
-        URLProtocolMock.reset()
-    }
-
     func testConfigureFetchesFlagsAndReadsTypedValue() async throws {
         let session = makeSession()
         let baseURL = makeBaseURL()
@@ -341,21 +331,12 @@ private final class MemoryStorage: TruflagStorage {
 
 private final class URLProtocolMock: URLProtocol {
     private static let lock = NSLock()
-    nonisolated(unsafe) static var handler: ((URLRequest) -> (Int, Data))?
     nonisolated(unsafe) static var handlersByHost: [String: (URLRequest) -> (Int, Data)] = [:]
 
     static func setHandler(for baseURL: URL, handler: @escaping (URLRequest) -> (Int, Data)) {
         guard let host = baseURL.host else { return }
         lock.lock()
-        self.handler = handler
         handlersByHost[host] = handler
-        lock.unlock()
-    }
-
-    static func reset() {
-        lock.lock()
-        handler = nil
-        handlersByHost = [:]
         lock.unlock()
     }
 
@@ -372,10 +353,8 @@ private final class URLProtocolMock: URLProtocol {
             let host = request.url?.host
             URLProtocolMock.lock.lock()
             defer { URLProtocolMock.lock.unlock() }
-            if let host, let scoped = URLProtocolMock.handlersByHost[host] {
-                return scoped
-            }
-            return URLProtocolMock.handler
+            guard let host else { return nil }
+            return URLProtocolMock.handlersByHost[host]
         }()
 
         let (statusCode, data): (Int, Data)
