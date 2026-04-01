@@ -16,6 +16,40 @@
 - Identity lifecycle (`configure`, `login`, `setAttributes`, `logout`)
 - Startup `current.json` prefetch and stale-config retry
 
+## Installation
+
+### Swift Package Manager
+
+Use a tagged release from the SDK repository root (the repo that contains this
+`Package.swift` at its root):
+
+```swift
+dependencies: [
+  .package(url: "https://github.com/truflag/truflag-swift-sdk.git", from: "0.1.0")
+]
+```
+
+Then add the product dependency:
+
+```swift
+.product(name: "TruflagSDK", package: "TruflagSDK")
+```
+
+### CocoaPods
+
+```ruby
+pod 'TruflagSDK', '~> 0.1'
+```
+
+## Publishing Notes
+
+- SwiftPM remote dependencies require `Package.swift` at repository root.
+- If this SDK remains in a monorepo subdirectory, publish via:
+  - a dedicated SDK repo, or
+  - a subtree split mirror of `sdk/native/ios/TruflagSDK`.
+- CocoaPods uses `TruflagSDK.podspec` and expects git tags that match
+  `s.version`.
+
 ## Quickstart
 
 ```swift
@@ -30,6 +64,13 @@ try await client.configure(
 )
 
 let enabled: Bool = await client.getFlag("new-checkout", defaultValue: false)
+
+// Optional: flush telemetry immediately for this event
+try await client.track(
+  eventName: "checkout_completed",
+  properties: ["value": AnyCodable(1)],
+  immediate: true
+)
 ```
 
 ## Tests

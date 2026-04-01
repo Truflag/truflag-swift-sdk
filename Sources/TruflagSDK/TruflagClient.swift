@@ -234,35 +234,23 @@ public actor TruflagClient {
         let startedAtMs = nowMs()
         nextRefreshTraceID += 1
         let traceID = nextRefreshTraceID
-        logDebug("refreshInternal[\(traceID)] start source=\(source) expectedConfigVersion=\(expectedConfigVersion ?? "-")")
+        logDebug("Truflag refresh started source=\(source) expectedConfigVersion=\(expectedConfigVersion ?? "-") trace=\(traceID)")
         do {
             var response = try await fetchFlags(expectedConfigVersion: expectedConfigVersion, bypassRuntimeCache: false)
-            let firstFetchDoneAtMs = nowMs()
-            logDebug("refreshInternal[\(traceID)] stage=afterFetch1 elapsedMs=\(firstFetchDoneAtMs - startedAtMs) stale=\(response.meta?.staleConfig == true)")
             if response.meta?.staleConfig == true {
+                logDebug("Truflag stale config detected, retrying fresh fetch expectedConfigVersion=\(expectedConfigVersion ?? "-") trace=\(traceID)")
                 response = try await fetchFlags(expectedConfigVersion: expectedConfigVersion, bypassRuntimeCache: true)
-                let secondFetchDoneAtMs = nowMs()
-                logDebug("refreshInternal[\(traceID)] stage=afterFetch2 elapsedMs=\(secondFetchDoneAtMs - startedAtMs) deltaMs=\(secondFetchDoneAtMs - firstFetchDoneAtMs)")
             }
 
             let fetchedAt = nowMs()
-            logDebug("refreshInternal[\(traceID)] stage=beforeApply elapsedMs=\(fetchedAt - startedAtMs)")
             applyFlags(from: response.flags, configVersion: response.meta?.configVersion)
-            let afterApplyAtMs = nowMs()
-            logDebug("refreshInternal[\(traceID)] stage=afterApply elapsedMs=\(afterApplyAtMs - startedAtMs) deltaMs=\(afterApplyAtMs - fetchedAt)")
             ready = true
             lastErrorMessage = nil
-            logDebug("refreshInternal[\(traceID)] stage=beforePersist elapsedMs=\(nowMs() - startedAtMs)")
             try persistCachedSnapshot(flags: response.flags, fetchedAt: fetchedAt)
-            let afterPersistAtMs = nowMs()
-            logDebug("refreshInternal[\(traceID)] stage=afterPersist elapsedMs=\(afterPersistAtMs - startedAtMs) deltaMs=\(afterPersistAtMs - afterApplyAtMs)")
-            logDebug("refreshInternal[\(traceID)] stage=beforeNotify elapsedMs=\(nowMs() - startedAtMs)")
             notifySubscribersIfStateChanged()
-            let afterNotifyAtMs = nowMs()
-            logDebug("refreshInternal[\(traceID)] stage=afterNotify elapsedMs=\(afterNotifyAtMs - startedAtMs) deltaMs=\(afterNotifyAtMs - afterPersistAtMs)")
             let uniqueCount = Set(response.flags.map { $0.key }).count
             logDebug(
-                "refreshInternal[\(traceID)] success source=\(source) version=\(response.meta?.configVersion ?? "-") flagsRaw=\(response.flags.count) flagsUnique=\(uniqueCount) totalMs=\(afterNotifyAtMs - startedAtMs) applyMs=\(afterApplyAtMs - fetchedAt) persistMs=\(afterPersistAtMs - afterApplyAtMs) notifyMs=\(afterNotifyAtMs - afterPersistAtMs)"
+                "Truflag refresh succeeded source=\(source) version=\(response.meta?.configVersion ?? "-") flags=\(uniqueCount) totalMs=\(nowMs() - startedAtMs) trace=\(traceID)"
             )
         } catch {
             if !flagsByKey.isEmpty {
@@ -270,7 +258,7 @@ public actor TruflagClient {
             }
             lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             notifySubscribersIfStateChanged()
-            logDebug("refreshInternal[\(traceID)] failed source=\(source): \(String(describing: error))")
+            logDebug("Truflag refresh failed source=\(source) trace=\(traceID) error=\(String(describing: error))")
             throw error
         }
     }
@@ -465,7 +453,11 @@ public actor TruflagClient {
         return out
     }
 
-    public func track(eventName: String, properties: [String: AnyCodable] = [:]) async throws {
+    public func track(
+        eventName: String,
+        properties: [String: AnyCodable] = [:],
+        immediate: Bool = false
+    ) async throws {
         logDebug("track() event=\(eventName)")
         _ = try getOptionsOrThrow()
         guard !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -486,7 +478,7 @@ public actor TruflagClient {
         event["properties"] = properties.mapValues { $0.value }
 
         enqueueTelemetryEvent(event)
-        if telemetryQueue.count >= (options?.telemetryBatchSize ?? 50) {
+        if immediate || telemetryQueue.count >= (options?.telemetryBatchSize ?? 50) {
             await flushTelemetry()
         }
     }
@@ -615,17 +607,11 @@ public actor TruflagClient {
         let options = try getOptionsOrThrow()
         let currentPath = "/config/client-side-id=\(urlEncode(options.apiKey))/current.json"
         let responseData = try await withRetry {
-            try await withTimeout(
-                promise: {
-                    try await self.get(
-                        path: currentPath,
-                        apiKey: options.apiKey,
-                        query: [:],
-                        requestTimeoutMs: options.requestTimeoutMs
-                    )
-                },
-                timeoutMs: options.requestTimeoutMs,
-                message: "Timed out while loading current config version."
+            try await self.get(
+                path: currentPath,
+                apiKey: options.apiKey,
+                query: [:],
+                requestTimeoutMs: options.requestTimeoutMs
             )
         }
 
@@ -662,17 +648,11 @@ public actor TruflagClient {
 
         let requestQuery = query
         return try await withRetry {
-            let data = try await withTimeout(
-                promise: {
-                    try await self.get(
-                        path: "/v1/flags",
-                        apiKey: options.apiKey,
-                        query: requestQuery,
-                        requestTimeoutMs: options.requestTimeoutMs
-                    )
-                },
-                timeoutMs: options.requestTimeoutMs,
-                message: "Timed out while refreshing flags."
+            let data = try await self.get(
+                path: "/v1/flags",
+                apiKey: options.apiKey,
+                query: requestQuery,
+                requestTimeoutMs: options.requestTimeoutMs
             )
             return try JSONDecoder().decode(TruflagRemoteFlagsResponse.self, from: data)
         }
@@ -696,32 +676,26 @@ public actor TruflagClient {
         guard let url = components.url else {
             throw TruflagError.invalidURL
         }
-
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = TimeInterval(requestTimeoutMs) / 1000.0
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         let startedAt = Date().timeIntervalSince1970
-        logDebug("HTTP GET \(url.absoluteString)")
 
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            let elapsedMs = Int((Date().timeIntervalSince1970 - startedAt) * 1000)
-            logDebug("HTTP GET network error ms=\(elapsedMs) url=\(url.absoluteString) error=\(String(describing: error))")
             throw error
         }
         guard let http = response as? HTTPURLResponse else {
             throw TruflagError.networkFailed
         }
         guard (200..<300).contains(http.statusCode) else {
-            logDebug("HTTP GET failed status=\(http.statusCode) url=\(url.absoluteString)")
             throw TruflagError.httpError(statusCode: http.statusCode)
         }
-        let elapsedMs = Int((Date().timeIntervalSince1970 - startedAt) * 1000)
-        logDebug("HTTP GET success status=\(http.statusCode) ms=\(elapsedMs) bytes=\(data.count)")
+        _ = Int((Date().timeIntervalSince1970 - startedAt) * 1000)
 
         return data
     }
@@ -1005,16 +979,13 @@ public actor TruflagClient {
         var lastError: Error?
         for attempt in 0..<Defaults.retryAttempts {
             do {
-                logDebug("withRetry() attempt=\(attempt + 1)/\(Defaults.retryAttempts)")
                 return try await operation()
             } catch {
                 lastError = error
-                logDebug("withRetry() attempt=\(attempt + 1) failed error=\(String(describing: error))")
                 if attempt == Defaults.retryAttempts - 1 {
                     break
                 }
                 let delay = computeRetryDelay(attempt: attempt)
-                logDebug("withRetry() sleepingMs=\(delay)")
                 try await Task.sleep(nanoseconds: delay * 1_000_000)
             }
         }
@@ -1364,6 +1335,7 @@ public actor TruflagClient {
     private func nowMs() -> Int64 {
         Int64(Date().timeIntervalSince1970 * 1000)
     }
+
 }
 
 public enum TruflagError: Error, Equatable {
@@ -1377,31 +1349,21 @@ public enum TruflagError: Error, Equatable {
 }
 
 private func withTimeout<T: Sendable>(promise: @escaping @Sendable () async throws -> T, timeoutMs: Int, message: String) async throws -> T {
-    let timeoutTask = Task<T, Error> {
-        try await Task.sleep(nanoseconds: UInt64(max(1, timeoutMs)) * 1_000_000)
-        throw NSError(domain: "TruflagTimeout", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
-    }
-    let workTask = Task<T, Error> {
-        try await promise()
-    }
+    let safeTimeoutMs = max(1, timeoutMs)
 
-    defer {
-        timeoutTask.cancel()
-        workTask.cancel()
-    }
-
-    return try await withTaskCancellationHandler(operation: {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await timeoutTask.value }
-            group.addTask { try await workTask.value }
-            guard let first = try await group.next() else {
-                throw NSError(domain: "TruflagTimeout", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
-            }
-            group.cancelAll()
-            return first
+    return try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask {
+            try await promise()
         }
-    }, onCancel: {
-        timeoutTask.cancel()
-        workTask.cancel()
-    })
+        group.addTask {
+            try await Task.sleep(nanoseconds: UInt64(safeTimeoutMs) * 1_000_000)
+            throw NSError(domain: "TruflagTimeout", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+
+        defer { group.cancelAll() }
+        guard let first = try await group.next() else {
+            throw NSError(domain: "TruflagTimeout", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        return first
+    }
 }
