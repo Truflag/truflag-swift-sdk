@@ -322,6 +322,7 @@ private final class URLProtocolMock: URLProtocol {
     static func setHandler(for baseURL: URL, handler: @escaping (URLRequest) -> (Int, Data)) {
         guard let host = baseURL.host else { return }
         lock.lock()
+        self.handler = handler
         handlersByHost[host] = handler
         lock.unlock()
     }
