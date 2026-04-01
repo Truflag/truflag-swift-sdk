@@ -175,17 +175,10 @@ public actor TruflagClient {
 
         notifySubscribersIfStateChanged()
         startTelemetryFlush()
-
+        let startupExpectedConfigVersion = await fetchPublishedConfigVersionNoThrow()
+        try await refresh(expectedConfigVersion: startupExpectedConfigVersion, source: "configure")
         startStreamOrPolling()
-        logDebug("configure() completed; initial refresh running in background")
-        // Keep configure fast: kick off initial refresh in background.
-        Task {
-            do {
-                try await self.refresh(source: "configure_background")
-            } catch {
-                // Background startup refresh failures are surfaced via state.
-            }
-        }
+        logDebug("configure() completed after startup refresh")
     }
 
     public func refresh(expectedConfigVersion: String? = nil) async throws {
