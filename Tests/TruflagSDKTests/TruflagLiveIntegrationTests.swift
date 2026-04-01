@@ -24,7 +24,7 @@ final class TruflagLiveIntegrationTests: XCTestCase {
         let ready = await client.isReady()
         XCTAssertTrue(ready)
 
-        _ = await client.getAllFlags()
+        let _: Bool = await client.getFlag("ios_live_smoke_flag", defaultValue: false)
         try await client.track(
             eventName: "ios_live_smoke_opened",
             properties: [

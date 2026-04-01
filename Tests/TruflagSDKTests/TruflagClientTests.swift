@@ -142,8 +142,8 @@ final class TruflagClientTests: XCTestCase {
         try await client.configure(
             TruflagConfigureOptions(
                 apiKey: "env_c_test",
-                telemetryBatchSize: 50,
-                telemetryFlushIntervalMs: 60_000_000
+                telemetryFlushIntervalMs: 60_000_000,
+                telemetryBatchSize: 50
             )
         )
 
@@ -286,7 +286,7 @@ private final class MemoryStorage: TruflagStorage {
 }
 
 private final class URLProtocolMock: URLProtocol {
-    static var handler: ((URLRequest) -> (Int, Data))?
+    nonisolated(unsafe) static var handler: ((URLRequest) -> (Int, Data))?
 
     static func reset() {
         handler = nil
