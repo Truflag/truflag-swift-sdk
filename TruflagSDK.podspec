@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'TruflagSDK'
-  s.version          = '0.2.1'
+  s.version          = '0.2.2'
   s.summary          = 'Truflag Swift SDK for feature flags and telemetry.'
   s.description      = <<-DESC
 Truflag Swift SDK provides flag evaluation, identity lifecycle, and telemetry

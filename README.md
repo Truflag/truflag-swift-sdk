@@ -25,7 +25,7 @@ Use a tagged release from the SDK repository root (the repo that contains this
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/truflag/truflag-swift-sdk.git", from: "0.1.0")
+  .package(url: "https://github.com/truflag/truflag-swift-sdk.git", from: "0.2.2")
 ]
 ```
 
@@ -38,7 +38,7 @@ Then add the product dependency:
 ### CocoaPods
 
 ```ruby
-pod 'TruflagSDK', '~> 0.1'
+pod 'TruflagSDK', '~> 0.2'
 ```
 
 ## Publishing Notes
