@@ -41,7 +41,13 @@ final class TruflagClientTests: XCTestCase {
             storage: MemoryStorage(),
             session: session
         )
-        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test", baseURL: baseURL))
+        try await client.configure(
+            TruflagConfigureOptions(
+                apiKey: "env_c_test",
+                baseURL: baseURL,
+                streamEnabled: false
+            )
+        )
 
         let value: Bool = await client.getFlag("new-checkout", defaultValue: false)
         let ready = await client.isReady()
@@ -81,7 +87,13 @@ final class TruflagClientTests: XCTestCase {
         }
 
         let client = TruflagClient(storage: MemoryStorage(), session: session)
-        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test", baseURL: baseURL))
+        try await client.configure(
+            TruflagConfigureOptions(
+                apiKey: "env_c_test",
+                baseURL: baseURL,
+                streamEnabled: false
+            )
+        )
 
         XCTAssertEqual(flagCalls, 2)
         let value: Bool = await client.getFlag("new-checkout", defaultValue: true)
@@ -121,6 +133,7 @@ final class TruflagClientTests: XCTestCase {
             TruflagConfigureOptions(
                 apiKey: "env_c_test",
                 baseURL: baseURL,
+                streamEnabled: false,
                 telemetryBatchSize: 1
             )
         )
@@ -158,6 +171,7 @@ final class TruflagClientTests: XCTestCase {
             TruflagConfigureOptions(
                 apiKey: "env_c_test",
                 baseURL: baseURL,
+                streamEnabled: false,
                 telemetryFlushIntervalMs: 60_000_000,
                 telemetryBatchSize: 50
             )
@@ -192,7 +206,13 @@ final class TruflagClientTests: XCTestCase {
         }
 
         let client = TruflagClient(storage: MemoryStorage(), session: session)
-        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test", baseURL: baseURL))
+        try await client.configure(
+            TruflagConfigureOptions(
+                apiKey: "env_c_test",
+                baseURL: baseURL,
+                streamEnabled: false
+            )
+        )
 
         let missing: Bool = await client.getFlag("missing-flag", defaultValue: false)
         let typeMismatch: String = await client.getFlag("numeric-flag", defaultValue: "fallback")
@@ -225,7 +245,13 @@ final class TruflagClientTests: XCTestCase {
         }
 
         let client = TruflagClient(storage: MemoryStorage(), session: session)
-        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test", baseURL: baseURL))
+        try await client.configure(
+            TruflagConfigureOptions(
+                apiKey: "env_c_test",
+                baseURL: baseURL,
+                streamEnabled: false
+            )
+        )
 
         shouldFailRefresh = true
         do {
@@ -279,6 +305,7 @@ final class TruflagClientTests: XCTestCase {
             TruflagConfigureOptions(
                 apiKey: "env_c_test",
                 baseURL: baseURL,
+                streamEnabled: false,
                 telemetryBatchSize: 1
             )
         )
