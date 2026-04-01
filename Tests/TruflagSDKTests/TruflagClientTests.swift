@@ -315,7 +315,7 @@ private final class MemoryStorage: TruflagStorage {
 }
 
 private final class URLProtocolMock: URLProtocol {
-    nonisolated(unsafe) private static let lock = NSLock()
+    private static let lock = NSLock()
     nonisolated(unsafe) static var handler: ((URLRequest) -> (Int, Data))?
     nonisolated(unsafe) static var handlersByHost: [String: (URLRequest) -> (Int, Data)] = [:]
 
@@ -352,11 +352,13 @@ private final class URLProtocolMock: URLProtocol {
             return URLProtocolMock.handler
         }()
 
-        guard let handler = selectedHandler else {
-            fatalError("URLProtocolMock.handler not set")
+        let (statusCode, data): (Int, Data)
+        if let handler = selectedHandler {
+            (statusCode, data) = handler(request)
+        } else {
+            // Do not crash tests when an unexpected host/request leaks through.
+            (statusCode, data) = (404, Data())
         }
-
-        let (statusCode, data) = handler(request)
         let response = HTTPURLResponse(
             url: request.url ?? URL(string: "https://sdk.truflag.com")!,
             statusCode: statusCode,
