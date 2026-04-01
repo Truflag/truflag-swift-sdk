@@ -11,7 +11,7 @@ tracking for iOS apps.
   s.author           = { 'Truflag' => 'support@truflag.com' }
   s.source           = {
     :git => 'https://github.com/truflag/truflag-swift-sdk.git',
-    :tag => s.version.to_s
+    :tag => "v#{s.version}"
   }
 
   s.platform         = :ios, '13.0'
