@@ -1,0 +1,95 @@
+name: release-swift-sdk
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "*.*.*"
+      - "sdk-ios-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (example: v0.2.0)"
+        required: true
+        type: string
+      publish_cocoapods:
+        description: "Publish to CocoaPods trunk"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.event.inputs.tag }}"
+            git fetch --tags --force
+            git checkout "tags/${TAG}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${TAG}" >> "$GITHUB_ENV"
+
+      - name: Verify podspec version matches tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          NORMALIZED="${TAG#sdk-ios-v}"
+          NORMALIZED="${NORMALIZED#v}"
+          PODSPEC_VERSION="$(ruby -e "spec = File.read('TruflagSDK.podspec'); puts spec[/s\\.version\\s*=\\s*'([^']+)'/,1]")"
+          if [[ -z "${PODSPEC_VERSION}" ]]; then
+            echo "Failed to parse s.version from TruflagSDK.podspec"
+            exit 1
+          fi
+          if [[ "${PODSPEC_VERSION}" != "${NORMALIZED}" ]]; then
+            echo "Tag (${TAG}) does not match podspec version (${PODSPEC_VERSION})."
+            exit 1
+          fi
+          echo "version=${PODSPEC_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "release_version=${PODSPEC_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Swift tests
+        run: swift test
+
+      - name: Install CocoaPods
+        run: |
+          gem install cocoapods --no-document
+          pod --version
+
+      - name: Podspec lint
+        run: pod lib lint TruflagSDK.podspec --allow-warnings --verbose
+
+      - name: Publish to CocoaPods
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_cocoapods == 'true')
+        shell: bash
+        run: |
+          if [[ -z "${COCOAPODS_TRUNK_TOKEN}" ]]; then
+            echo "COCOAPODS_TRUNK_TOKEN secret is not set."
+            exit 1
+          fi
+          pod trunk push TruflagSDK.podspec --allow-warnings --verbose
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: TruflagSDK ${{ steps.version.outputs.version }}
+          generate_release_notes: true

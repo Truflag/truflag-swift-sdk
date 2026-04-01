@@ -49,6 +49,10 @@ pod 'TruflagSDK', '~> 0.1'
   - a subtree split mirror of `sdk/native/ios/TruflagSDK`.
 - CocoaPods uses `TruflagSDK.podspec` and expects git tags that match
   `s.version`.
+- CI release workflow: `.github/workflows/release-swift-sdk.yml`
+  - Runs on tag push (`v*`, `*.*.*`, `sdk-ios-v*`)
+  - Runs `swift test`, `pod lib lint`, then `pod trunk push`
+  - Requires repository secret `COCOAPODS_TRUNK_TOKEN`
 
 ## Quickstart
 
