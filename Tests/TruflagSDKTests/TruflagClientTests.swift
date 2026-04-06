@@ -6,10 +6,14 @@ import XCTest
 @testable import TruflagSDK
 
 final class TruflagClientTests: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        URLProtocolMock.reset()
+    }
+
     func testConfigureFetchesFlagsAndReadsTypedValue() async throws {
         let session = makeSession()
-        let baseURL = makeBaseURL()
-        URLProtocolMock.setHandler(for: baseURL) { request in
+        URLProtocolMock.handler = { request in
             guard let url = request.url else {
                 return (500, Data())
             }
@@ -31,13 +35,7 @@ final class TruflagClientTests: XCTestCase {
             storage: MemoryStorage(),
             session: session
         )
-        try await client.configure(
-            TruflagConfigureOptions(
-                apiKey: "env_c_test",
-                baseURL: baseURL,
-                streamEnabled: false
-            )
-        )
+        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test"))
 
         let value: Bool = await client.getFlag("new-checkout", defaultValue: false)
         let ready = await client.isReady()
@@ -48,8 +46,7 @@ final class TruflagClientTests: XCTestCase {
     func testRefreshRetriesWithBypassForStaleConfig() async throws {
         var flagCalls = 0
         let session = makeSession()
-        let baseURL = makeBaseURL()
-        URLProtocolMock.setHandler(for: baseURL) { request in
+        URLProtocolMock.handler = { request in
             guard let url = request.url else {
                 return (500, Data())
             }
@@ -77,13 +74,7 @@ final class TruflagClientTests: XCTestCase {
         }
 
         let client = TruflagClient(storage: MemoryStorage(), session: session)
-        try await client.configure(
-            TruflagConfigureOptions(
-                apiKey: "env_c_test",
-                baseURL: baseURL,
-                streamEnabled: false
-            )
-        )
+        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test"))
 
         XCTAssertEqual(flagCalls, 2)
         let value: Bool = await client.getFlag("new-checkout", defaultValue: true)
@@ -91,10 +82,9 @@ final class TruflagClientTests: XCTestCase {
     }
 
     func testTrackSendsBatch() async throws {
-        var eventsBatchCalls = 0
+        var sawEventsBatch = false
         let session = makeSession()
-        let baseURL = makeBaseURL()
-        URLProtocolMock.setHandler(for: baseURL) { request in
+        URLProtocolMock.handler = { request in
             guard let url = request.url else {
                 return (500, Data())
             }
@@ -108,30 +98,125 @@ final class TruflagClientTests: XCTestCase {
                 )
             }
             if url.path == "/v1/events/batch" {
-                eventsBatchCalls += 1
+                if let body = request.httpBody,
+                   let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+                   object["events"] != nil {
+                    sawEventsBatch = true
+                }
                 return (202, Data("{\"accepted\":1}".utf8))
             }
             return (404, Data())
         }
 
         let client = TruflagClient(storage: MemoryStorage(), session: session)
-        try await client.configure(
-            TruflagConfigureOptions(
-                apiKey: "env_c_test",
-                baseURL: baseURL,
-                streamEnabled: false,
-                telemetryBatchSize: 1
-            )
-        )
+        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test"))
         try await client.track(eventName: "checkout_completed", properties: ["value": AnyCodable(1)])
-        XCTAssertGreaterThan(eventsBatchCalls, 0)
+
+        XCTAssertTrue(sawEventsBatch)
+    }
+
+    func testTrackAttachesExperimentContextsAndStripsLegacyExperimentScalarFields() async throws {
+        var capturedProperties: [String: Any]?
+        let session = makeSession()
+        URLProtocolMock.handler = { request in
+            guard let url = request.url else {
+                return (500, Data())
+            }
+            if url.path.contains("/config/client-side-id=") {
+                return (200, Data("{\"version\":\"v1\"}".utf8))
+            }
+            if url.path == "/v1/flags" {
+                return (
+                    200,
+                    Data(
+                        """
+                        {
+                          "flags":[
+                            {
+                              "key":"paywall-copy",
+                              "value":"v1",
+                              "payload":{
+                                "experimentId":"exp-paywall",
+                                "experimentArmId":"arm-a",
+                                "assignmentId":"assign-a",
+                                "variationId":"var-a"
+                              }
+                            },
+                            {
+                              "key":"discount-level",
+                              "value":50,
+                              "payload":{
+                                "experimentId":"exp-discount",
+                                "experimentArmId":"arm-b",
+                                "assignmentId":"assign-b",
+                                "variationId":"var-b"
+                              }
+                            }
+                          ],
+                          "meta":{"configVersion":"v1"}
+                        }
+                        """.utf8
+                    )
+                )
+            }
+            if url.path == "/v1/events/batch" {
+                if let body = request.httpBody,
+                   let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+                   let events = object["events"] as? [[String: Any]],
+                   let first = events.first,
+                   let properties = first["properties"] as? [String: Any] {
+                    capturedProperties = properties
+                }
+                return (202, Data("{\"accepted\":1}".utf8))
+            }
+            return (404, Data())
+        }
+
+        let client = TruflagClient(storage: MemoryStorage(), session: session)
+        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test"))
+        try await client.track(
+            eventName: "checkout_completed",
+            properties: [
+                "value": AnyCodable(1),
+                "experimentId": AnyCodable("legacy-exp"),
+                "experimentArmId": AnyCodable("legacy-arm"),
+                "armId": AnyCodable("legacy-arm"),
+                "assignmentId": AnyCodable("legacy-assignment"),
+                "flagKey": AnyCodable("legacy-flag"),
+                "variationId": AnyCodable("legacy-var"),
+            ],
+            immediate: true
+        )
+
+        guard let properties = capturedProperties else {
+            XCTFail("Expected /v1/events/batch payload")
+            return
+        }
+        XCTAssertNil(properties["experimentId"])
+        XCTAssertNil(properties["experimentArmId"])
+        XCTAssertNil(properties["armId"])
+        XCTAssertNil(properties["assignmentId"])
+        XCTAssertNil(properties["flagKey"])
+        XCTAssertNil(properties["variationId"])
+        XCTAssertEqual(properties["attributionVersion"] as? String, "2")
+        guard let contexts = properties["experimentContexts"] as? [[String: Any]] else {
+            XCTFail("Expected experimentContexts on tracked event")
+            return
+        }
+        XCTAssertEqual(contexts.count, 2)
+        let byExperiment = Dictionary(
+            uniqueKeysWithValues: contexts.map { context in
+                ((context["experimentId"] as? String) ?? "", context)
+            }
+        )
+        XCTAssertEqual(byExperiment["exp-paywall"]?["armId"] as? String, "arm-a")
+        XCTAssertEqual(byExperiment["exp-discount"]?["armId"] as? String, "arm-b")
     }
 
     func testTrackImmediateFlushesEvenWhenBelowBatchSize() async throws {
         var eventsBatchCalls = 0
         let session = makeSession()
-        let baseURL = makeBaseURL()
-        URLProtocolMock.setHandler(for: baseURL) { request in
+        URLProtocolMock.handler = { request in
             guard let url = request.url else {
                 return (500, Data())
             }
@@ -155,10 +240,8 @@ final class TruflagClientTests: XCTestCase {
         try await client.configure(
             TruflagConfigureOptions(
                 apiKey: "env_c_test",
-                baseURL: baseURL,
-                streamEnabled: false,
-                telemetryFlushIntervalMs: 60_000_000,
-                telemetryBatchSize: 50
+                telemetryBatchSize: 50,
+                telemetryFlushIntervalMs: 60_000_000
             )
         )
 
@@ -171,10 +254,9 @@ final class TruflagClientTests: XCTestCase {
         XCTAssertEqual(eventsBatchCalls, 1)
     }
 
-    func testGetFlagReturnsCallerFallbackWhenMissingOrTypeMismatch() async throws {
+    func testGetFlagReturnsMissingFallbackAndRawValueForTypeMismatch() async throws {
         let session = makeSession()
-        let baseURL = makeBaseURL()
-        URLProtocolMock.setHandler(for: baseURL) { request in
+        URLProtocolMock.handler = { request in
             guard let url = request.url else {
                 return (500, Data())
             }
@@ -191,26 +273,19 @@ final class TruflagClientTests: XCTestCase {
         }
 
         let client = TruflagClient(storage: MemoryStorage(), session: session)
-        try await client.configure(
-            TruflagConfigureOptions(
-                apiKey: "env_c_test",
-                baseURL: baseURL,
-                streamEnabled: false
-            )
-        )
+        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test"))
 
         let missing: Bool = await client.getFlag("missing-flag", defaultValue: false)
-        let typeMismatch: String = await client.getFlag("numeric-flag", defaultValue: "fallback")
+        let typeMismatch: Any = await client.getFlag("numeric-flag", defaultValue: "fallback" as Any)
 
         XCTAssertFalse(missing)
-        XCTAssertEqual(typeMismatch, "fallback")
+        XCTAssertEqual(typeMismatch as? Int, 2)
     }
 
     func testRefreshFailureKeepsPreviouslyLoadedFlags() async throws {
         var shouldFailRefresh = false
         let session = makeSession()
-        let baseURL = makeBaseURL()
-        URLProtocolMock.setHandler(for: baseURL) { request in
+        URLProtocolMock.handler = { request in
             guard let url = request.url else {
                 return (500, Data())
             }
@@ -230,31 +305,19 @@ final class TruflagClientTests: XCTestCase {
         }
 
         let client = TruflagClient(storage: MemoryStorage(), session: session)
-        try await client.configure(
-            TruflagConfigureOptions(
-                apiKey: "env_c_test",
-                baseURL: baseURL,
-                streamEnabled: false
-            )
-        )
+        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test"))
 
         shouldFailRefresh = true
-        do {
-            try await client.refresh()
-            XCTFail("Expected refresh to fail")
-        } catch {
-            // expected
-        }
+        try await client.refresh()
 
         let stillAvailable: Bool = await client.getFlag("new-checkout", defaultValue: false)
         XCTAssertTrue(stillAvailable)
     }
 
     func testExposeSendsExposureEventPayload() async throws {
-        var eventsBatchCalls = 0
+        var receivedExposureEvent = false
         let session = makeSession()
-        let baseURL = makeBaseURL()
-        URLProtocolMock.setHandler(for: baseURL) { request in
+        URLProtocolMock.handler = { request in
             guard let url = request.url else {
                 return (500, Data())
             }
@@ -270,18 +333,15 @@ final class TruflagClientTests: XCTestCase {
                 )
             }
             if url.path == "/v1/events/batch" {
-                eventsBatchCalls += 1
                 if let body = request.httpBody,
                    let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-                   let events = object["events"] as? [[String: Any]] {
-                    for event in events {
-                        guard event["name"] as? String == "truflag.system.exposure" else { continue }
-                        guard let properties = event["properties"] as? [String: Any] else { continue }
-                        if properties["flagKey"] as? String == "economyvariation",
-                           properties["reason"] as? String == "experimentArm" {
-                            break
-                        }
-                    }
+                   let events = object["events"] as? [[String: Any]],
+                   let first = events.first,
+                   first["name"] as? String == "truflag.system.exposure",
+                   let properties = first["properties"] as? [String: Any],
+                   properties["flagKey"] as? String == "economyvariation",
+                   properties["reason"] as? String == "experimentArm" {
+                    receivedExposureEvent = true
                 }
                 return (202, Data("{\"accepted\":1}".utf8))
             }
@@ -289,16 +349,36 @@ final class TruflagClientTests: XCTestCase {
         }
 
         let client = TruflagClient(storage: MemoryStorage(), session: session)
-        try await client.configure(
-            TruflagConfigureOptions(
-                apiKey: "env_c_test",
-                baseURL: baseURL,
-                streamEnabled: false,
-                telemetryBatchSize: 1
-            )
-        )
+        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test"))
         try await client.expose(flagKey: "economyvariation")
-        XCTAssertGreaterThan(eventsBatchCalls, 0)
+
+        XCTAssertTrue(receivedExposureEvent)
+    }
+
+    func testExposeThrowsWhenFlagMissing() async throws {
+        let session = makeSession()
+        URLProtocolMock.handler = { request in
+            guard let url = request.url else {
+                return (500, Data())
+            }
+            if url.path.contains("/config/client-side-id=") {
+                return (200, Data("{\"version\":\"v1\"}".utf8))
+            }
+            if url.path == "/v1/flags" {
+                return (200, Data("{\"flags\":[],\"meta\":{\"configVersion\":\"v1\"}}".utf8))
+            }
+            return (404, Data())
+        }
+
+        let client = TruflagClient(storage: MemoryStorage(), session: session)
+        try await client.configure(TruflagConfigureOptions(apiKey: "env_c_test"))
+
+        do {
+            try await client.expose(flagKey: "missing-flag")
+            XCTFail("Expected expose to throw for missing flag")
+        } catch let error as TruflagError {
+            XCTAssertEqual(error, .missingFlag("missing-flag"))
+        }
     }
 
     private func makeSession() -> URLSession {
@@ -306,13 +386,9 @@ final class TruflagClientTests: XCTestCase {
         config.protocolClasses = [URLProtocolMock.self]
         return URLSession(configuration: config)
     }
-
-    private func makeBaseURL() -> URL {
-        URL(string: "https://\(UUID().uuidString.lowercased()).test")!
-    }
 }
 
-private final class MemoryStorage: TruflagStorage {
+private final class MemoryStorage: TruflagStorage, @unchecked Sendable {
     private var map: [String: String] = [:]
 
     func getItem(_ key: String) -> String? {
@@ -329,14 +405,10 @@ private final class MemoryStorage: TruflagStorage {
 }
 
 private final class URLProtocolMock: URLProtocol {
-    private static let lock = NSLock()
-    nonisolated(unsafe) static var handlersByHost: [String: (URLRequest) -> (Int, Data)] = [:]
+    static var handler: ((URLRequest) -> (Int, Data))?
 
-    static func setHandler(for baseURL: URL, handler: @escaping (URLRequest) -> (Int, Data)) {
-        guard let host = baseURL.host else { return }
-        lock.lock()
-        handlersByHost[host] = handler
-        lock.unlock()
+    static func reset() {
+        handler = nil
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
@@ -348,21 +420,11 @@ private final class URLProtocolMock: URLProtocol {
     }
 
     override func startLoading() {
-        let selectedHandler: ((URLRequest) -> (Int, Data))? = {
-            let host = request.url?.host
-            URLProtocolMock.lock.lock()
-            defer { URLProtocolMock.lock.unlock() }
-            guard let host else { return nil }
-            return URLProtocolMock.handlersByHost[host]
-        }()
-
-        let (statusCode, data): (Int, Data)
-        if let handler = selectedHandler {
-            (statusCode, data) = handler(request)
-        } else {
-            // Do not crash tests when an unexpected host/request leaks through.
-            (statusCode, data) = (404, Data())
+        guard let handler = URLProtocolMock.handler else {
+            fatalError("URLProtocolMock.handler not set")
         }
+
+        let (statusCode, data) = handler(request)
         let response = HTTPURLResponse(
             url: request.url ?? URL(string: "https://sdk.truflag.com")!,
             statusCode: statusCode,

@@ -1,4 +1,24 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+public enum TruflagLogLevel: String, Codable, Sendable {
+    case debug
+    case info
+    case warn
+    case error
+    case silent
+}
+
+public protocol TruflagLogger: Sendable {
+    func debug(message: String, meta: [String: AnyCodable]?)
+    func info(message: String, meta: [String: AnyCodable]?)
+    func warn(message: String, meta: [String: AnyCodable]?)
+    func error(message: String, meta: [String: AnyCodable]?)
+}
+
+public typealias TruflagFetchFunction = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
 public struct TruflagUser: Codable, Equatable, Sendable {
     public let id: String
@@ -22,6 +42,10 @@ public struct TruflagConfigureOptions: Sendable {
     public let telemetryFlushIntervalMs: Int
     public let telemetryBatchSize: Int
     public let telemetryEnabled: Bool
+    public let logLevel: TruflagLogLevel
+    public let logger: (any TruflagLogger)?
+    public let fetchFn: TruflagFetchFunction?
+    public let storage: (any TruflagStorage)?
     public let debugLoggingEnabled: Bool
 
     public init(
@@ -36,6 +60,10 @@ public struct TruflagConfigureOptions: Sendable {
         telemetryFlushIntervalMs: Int = 10_000,
         telemetryBatchSize: Int = 50,
         telemetryEnabled: Bool = true,
+        logLevel: TruflagLogLevel = .debug,
+        logger: (any TruflagLogger)? = nil,
+        fetchFn: TruflagFetchFunction? = nil,
+        storage: (any TruflagStorage)? = nil,
         debugLoggingEnabled: Bool = false
     ) {
         self.apiKey = apiKey
@@ -49,6 +77,10 @@ public struct TruflagConfigureOptions: Sendable {
         self.telemetryFlushIntervalMs = telemetryFlushIntervalMs
         self.telemetryBatchSize = telemetryBatchSize
         self.telemetryEnabled = telemetryEnabled
+        self.logLevel = logLevel
+        self.logger = logger
+        self.fetchFn = fetchFn
+        self.storage = storage
         self.debugLoggingEnabled = debugLoggingEnabled
     }
 }
@@ -68,9 +100,13 @@ public struct TruflagFlag: Codable, Equatable, Sendable {
 public struct TruflagClientState: Equatable, Sendable {
     public let configured: Bool
     public let ready: Bool
+    public let apiKey: String?
+    public let user: TruflagUser?
     public let userId: String
     public let flags: [String: TruflagFlag]
+    public let lastFetchAt: Int64?
     public let configVersion: String?
+    public let error: String?
     public let lastError: String?
     public let streamStatus: String
     public let pollingActive: Bool
@@ -172,13 +208,13 @@ public struct AnyCodable: Codable, Equatable, @unchecked Sendable {
     }
 }
 
-public protocol TruflagStorage {
+public protocol TruflagStorage: Sendable {
     func getItem(_ key: String) -> String?
     func setItem(_ key: String, value: String)
     func removeItem(_ key: String)
 }
 
-public final class UserDefaultsTruflagStorage: TruflagStorage {
+public final class UserDefaultsTruflagStorage: TruflagStorage, @unchecked Sendable {
     private let defaults: UserDefaults
 
     public init(defaults: UserDefaults = .standard) {

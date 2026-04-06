@@ -25,7 +25,7 @@ Use a tagged release from the SDK repository root (the repo that contains this
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/truflag/truflag-swift-sdk.git", from: "0.2.2")
+  .package(url: "https://github.com/truflag/truflag-swift-sdk.git", from: "0.2.3")
 ]
 ```
 
@@ -38,7 +38,7 @@ Then add the product dependency:
 ### CocoaPods
 
 ```ruby
-pod 'TruflagSDK', '~> 0.2'
+pod 'TruflagSDK', '~> 0.1'
 ```
 
 ## Publishing Notes
@@ -49,10 +49,7 @@ pod 'TruflagSDK', '~> 0.2'
   - a subtree split mirror of `sdk/native/ios/TruflagSDK`.
 - CocoaPods uses `TruflagSDK.podspec` and expects git tags that match
   `s.version`.
-- CI release workflow: `.github/workflows/release-swift-sdk.yml`
-  - Runs on tag push (`v*`, `*.*.*`, `sdk-ios-v*`)
-  - Runs `swift test`, `pod lib lint`, then `pod trunk push`
-  - Requires repository secret `COCOAPODS_TRUNK_TOKEN`
+- Full release steps: `RELEASING.md`.
 
 ## Quickstart
 
